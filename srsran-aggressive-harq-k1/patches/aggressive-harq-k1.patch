@@ -1,0 +1,41 @@
+diff --git a/lib/scheduler/uci_scheduling/uci_allocator_impl.cpp b/lib/scheduler/uci_scheduling/uci_allocator_impl.cpp
+index e7ccbf5a93..83136ae1a9 100644
+--- a/lib/scheduler/uci_scheduling/uci_allocator_impl.cpp
++++ b/lib/scheduler/uci_scheduling/uci_allocator_impl.cpp
+@@ -28,6 +28,9 @@
+ #include "srsran/ran/csi_report/csi_report_on_pusch_helpers.h"
+ #include "srsran/ran/csi_report/csi_report_pusch_size.h"
+ #include "srsran/srslog/srslog.h"
++#include <algorithm>
++#include <vector>
++
+ 
+ using namespace srsran;
+ 
+@@ -207,7 +210,15 @@ std::optional<uci_allocation> uci_allocator_impl::alloc_uci_harq_ue(cell_resourc
+                                          *std::min_element(k1_list.begin(), k1_list.end()),
+                                          *std::max_element(k1_list.begin(), k1_list.end()));
+ 
+-  for (const uint8_t k1_candidate : k1_list) {
++  // Aggressive HARQ: prefer smaller k1 (earlier HARQ-ACK) whenever feasible.
++  // k1_list is a span/view, so copy to a mutable container before sorting.
++  std::vector<uint8_t> k1_candidates_sorted(k1_list.begin(), k1_list.end());
++  std::sort(k1_candidates_sorted.begin(), k1_candidates_sorted.end());
++  k1_candidates_sorted.erase(std::unique(k1_candidates_sorted.begin(), k1_candidates_sorted.end()),
++                           k1_candidates_sorted.end());
++
++
++  for (const uint8_t k1_candidate : k1_candidates_sorted) {
+     // Step 1: Check for validity of the UCI slot and other restrictions.
+ 
+     // Check whether the UCI slot to be scheduled is >= last UCI HARQ ACK allocated slot for the UE.
+@@ -260,6 +271,9 @@ std::optional<uci_allocation> uci_allocator_impl::alloc_uci_harq_ue(cell_resourc
+       ++uci->scheduled_dl_pdcch_counter;
+       uci_output.value().k1 = k1_candidate;
+ 
++	  logger.warning("AGGRESSIVE-HARQ: rnti={} k0={} k1_candidate={} uci_slot={}",
++					 crnti, k0, k1_candidate, uci_slot);
++
+       return uci_output;
+     }
+   }
